@@ -15,7 +15,7 @@ fastapi = "0.83.0"
 httpx = "0.23.0"
 jinja2 = "3.0.1"
 lnurl = "0.3.6"
-psycopg2-binary = "2.9.1"
+psycopg2-binary = "^2.9.5"
 pydantic = "1.10.4"
 pyqrcode = "1.2.1"
 shortuuid = "1.0.11"
@@ -31,22 +31,27 @@ grpcio = "1.51.1"
 protobuf = "4.21.12"
 Cerberus = "1.3.4"
 async-timeout = "4.0.2"
-pyln-client = "23.8"
-cashu = "0.9.0"
+pyln-client = "0.11.1"
 slowapi = "^0.1.7"
+websocket-client = "^1.6.1"
+secp256k1 = "^0.14.0"
+pycryptodomex = "^3.18.0"
+
 
 [tool.poetry.group.dev.dependencies]
+flake8 = "^6.0.0"
+isort = "^5.12.0"
 pytest = "^7.1.2"
 mock = "^4.0.3"
-black = "^23.7.0"
+black = "^22.6.0"
 pytest-asyncio = "^0.19.0"
-pytest-cov = "^4.1.0"
-mypy = "^1.5.1"
+pytest-cov = "^3.0.0"
+mypy = "^0.971"
 types-protobuf = "^3.19.22"
+pylint = "^2.17.2"
 pre-commit = "^3.2.2"
 types-mock = "^5.0.0.6"
 openapi-spec-validator = "^0.5.5"
-ruff = "^0.0.284"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -54,7 +59,9 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 lnbits = "lnbits.server:main"
-lnbits-cli = "lnbits.commands:main"
+
+[tool.isort]
+profile = "black"
 
 [tool.pyright]
 include = [
@@ -71,7 +78,6 @@ files = "lnbits"
 exclude = [
   "^lnbits/wallets/lnd_grpc_files",
   "^lnbits/extensions",
-  "^lnbits/upgrades",
 ]
 
 [[tool.mypy.overrides]]
@@ -91,81 +97,44 @@ module = [
   "ecdsa.*",
   "psycopg2.*",
   "pyngrok.*",
-  "pyln.client.*",
 ]
 ignore_missing_imports = "True"
 
 [tool.pytest.ini_options]
-log_cli = true
 addopts = "--durations=1 -s --cov=lnbits --cov-report=xml"
 testpaths = [
   "tests"
 ]
 
-[tool.black]
-line-length = 88
-# use upcoming new features
-# preview = true
-extend-exclude = """(
-    lnbits/static
-    | lnbits/extensions
-    | lnbits/upgrades
-    | lnbits/wallets/lnd_grpc_files
-)"""
-
-[tool.ruff]
-# Same as Black. + 10% rule of black
-line-length = 88
-
-# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
-# (`I`) is for `isort`.
-select = ["E", "F", "I"]
-ignore = [
-    "E402", # Module level import not at top of file
+[tool.pylint.'MESSAGES CONTROL']
+max-line-length = 300
+disable = "all"
+enable = [
+    "assignment-from-none",
+    "chained-comparison",
+    "consider-merging-isinstance",
+    "consider-using-dict-comprehension",
+    "consider-using-dict-items",
+    "consider-using-f-string",
+    "consider-using-in",
+    "dangerous-default-value",
+    "inconsistent-return-statements",
+    "lost-exception",
+    "pointless-string-statement",
+    "simplifiable-if-statement",
+    "super-init-not-called",
+    "superfluous-parens",
+    "unused-variable",
+    "use-list-literal",
+    "useless-else-on-loop",
+    "useless-object-inheritance",
 ]
 
-# Allow autofix for all enabled rules (when `--fix`) is provided.
-fixable = ["ALL"]
-unfixable = []
-
-# Exclude a variety of commonly ignored directories.
-exclude = [
-    "lnbits/static",
-    "lnbits/extensions",
-    "lnbits/wallets/lnd_grpc_files",
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".git-rewrite",
-    ".hg",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "venv",
+[tool.pylint.MASTER]
+ignore-paths = [
+  "^lnbits/extensions/.*$",
+  "^lnbits/upgrades/.*$",
+  "^lnbits/wallets/lnd_grpc_files/.*$",
 ]
-
-# Allow unused variables when underscore-prefixed.
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-
-# Assume Python
-# target-version = "py39"
-
-# Ignore unused imports in __init__.py files.
-[tool.ruff.extend-per-file-ignores]
-"__init__.py" = ["F401", "F403"]
-
-[tool.ruff.mccabe]
-# Unlike Flake8, default to a complexity level of 10.
-max-complexity = 10
+fail-under = 10.0
+jobs = 0
