@@ -5,91 +5,121 @@ import json
 import subprocess
 from os import path
 from sqlite3 import Row
-from typing import Any, List, Optional
+from typing import Any, List, Type, Tuple, Optional
 
 import httpx
 from loguru import logger
-from pydantic import BaseSettings, Extra, Field, validator
+from pydantic import (
+    AfterValidator,
+    Field, 
+    field_validator,
+    ValidationError,
+)
+from pydantic.fields import FieldInfo
+from pydantic_settings import (
+    BaseSettings,
+    DotEnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+from annotated_types import MinLen
+from typing_extensions import Annotated
 
+def list_validator(v: List[str]) -> List[str]:
+    if not isinstance(v, list):
+        raise ValidationError("must be a list")
+    return v
 
-def list_parse_fallback(v: str):
-    v = v.replace(" ", "")
-    if len(v) > 0:
-        if v.startswith("[") or v.startswith("{"):
-            return json.loads(v)
-        else:
-            return v.split(",")
-    else:
-        return []
+LNList = Annotated[List[str], AfterValidator(list_validator)]
 
+class QuotedListDotEnvSource(DotEnvSettingsSource):
+    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+        if value is not None and field.annotation is List[str]:
+            # sanitize in case of ENV_VALUE="[item1, item2, item3]" instead of ENV_VALUE="item1, item2, item3"
+            # remove all quotes, brackets, and spaces from value
+            sanitized = value.replace('"', "").replace("'", "").replace("[", "").replace("]", "").replace(" ", "")
+            return sanitized.split(",")
+        return super().prepare_field_value(field_name, field, value, value_is_complex)
 
 class LNbitsSettings(BaseSettings):
     @classmethod
     def validate(cls, val):
+        print(f"validate - val: {val}")
         if isinstance(val, str):
             val = val.split(",") if val else []
         return val
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        json_loads = list_parse_fallback
-        extra = Extra.ignore
-
+    model_config = SettingsConfigDict(
+        env_file='.env',
+        env_file_encoding='utf-8',
+        case_sensitive=False,
+        str_strip_whitespace=True,
+        env_nested_delimiter=',',
+        extra='ignore')
+    
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            QuotedListDotEnvSource(settings_cls),
+            )
 
 class UsersSettings(LNbitsSettings):
-    lnbits_admin_users: List[str] = Field(default=[])
-    lnbits_allowed_users: List[str] = Field(default=[])
+    lnbits_admin_users: LNList = []
+    lnbits_allowed_users: LNList = []
 
 
 class ExtensionsSettings(LNbitsSettings):
-    lnbits_admin_extensions: List[str] = Field(default=[])
-    lnbits_extensions_manifests: List[str] = Field(
-        default=[
-            "https://raw.githubusercontent.com/lnbits/lnbits-extensions/main/extensions.json"
+    lnbits_admin_extensions: LNList = []
+    lnbits_extensions_manifests: LNList = [
+            "https://raw.githubusercontent.com/lnbits/lnbits-extensions/main/extensions.json",
         ]
-    )
 
 
 class ExtensionsInstallSettings(LNbitsSettings):
-    lnbits_extensions_default_install: List[str] = Field(default=[])
+    lnbits_extensions_default_install: str = Field(default="")
     # required due to GitHUb rate-limit
     lnbits_ext_github_token: str = Field(default="")
 
 
 class InstalledExtensionsSettings(LNbitsSettings):
     # installed extensions that have been deactivated
-    lnbits_deactivated_extensions: List[str] = Field(default=[])
+    lnbits_deactivated_extensions: LNList = []
     # upgraded extensions that require API redirects
-    lnbits_upgraded_extensions: List[str] = Field(default=[])
+    lnbits_upgraded_extensions: LNList = []
     # list of redirects that extensions want to perform
-    lnbits_extensions_redirects: List[Any] = Field(default=[])
+    lnbits_extensions_redirects: LNList = []
 
 
 class ThemesSettings(LNbitsSettings):
     lnbits_site_title: str = Field(default="LNbits")
     lnbits_site_tagline: str = Field(default="free and open-source lightning wallet")
-    lnbits_site_description: str = Field(default=None)
+    lnbits_site_description: str = Field(default="")
     lnbits_default_wallet_name: str = Field(default="LNbits wallet")
-    lnbits_theme_options: List[str] = Field(
-        default=[
-            "classic",
-            "freedom",
-            "mint",
-            "salvador",
-            "monochrome",
-            "autumn",
-            "cyber",
+    lnbits_theme_options: Annotated[List[str], MinLen(1)] = [
+        "classic",
+        "freedom",
+        "mint",
+        "salvador",
+        "monochrome",
+        "autumn",
+        "cyber",
         ]
-    )
-    lnbits_custom_logo: str = Field(default=None)
+    
+    lnbits_custom_logo: str = Field(default="")
     lnbits_ad_space_title: str = Field(default="Supported by")
     lnbits_ad_space: str = Field(
         default="https://shop.lnbits.com/;/static/images/lnbits-shop-light.png;/static/images/lnbits-shop-dark.png"
     )  # sneaky sneaky
     lnbits_ad_space_enabled: bool = Field(default=False)
-    lnbits_allowed_currencies: List[str] = Field(default=[])
+    lnbits_allowed_currencies: LNList = []
 
 
 class OpsSettings(LNbitsSettings):
@@ -104,8 +134,8 @@ class OpsSettings(LNbitsSettings):
 class SecuritySettings(LNbitsSettings):
     lnbits_rate_limit_no: str = Field(default="200")
     lnbits_rate_limit_unit: str = Field(default="minute")
-    lnbits_allowed_ips: List[str] = Field(default=[])
-    lnbits_blocked_ips: List[str] = Field(default=[])
+    lnbits_allowed_ips: List[str] = []
+    lnbits_blocked_ips: List[str] = []
     lnbits_notifications: bool = Field(default=False)
     lnbits_killswitch: bool = Field(default=False)
     lnbits_killswitch_interval: int = Field(default=60)
@@ -125,77 +155,77 @@ class FakeWalletFundingSource(LNbitsSettings):
 
 class LNbitsFundingSource(LNbitsSettings):
     lnbits_endpoint: str = Field(default="https://legend.lnbits.com")
-    lnbits_key: Optional[str] = Field(default=None)
-    lnbits_admin_key: Optional[str] = Field(default=None)
-    lnbits_invoice_key: Optional[str] = Field(default=None)
+    lnbits_key: Optional[str] = None
+    lnbits_admin_key: Optional[str] = None
+    lnbits_invoice_key: Optional[str] = None
 
 
 class ClicheFundingSource(LNbitsSettings):
-    cliche_endpoint: Optional[str] = Field(default=None)
+    cliche_endpoint: Optional[str] = None
 
 
 class CoreLightningFundingSource(LNbitsSettings):
-    corelightning_rpc: Optional[str] = Field(default=None)
-    clightning_rpc: Optional[str] = Field(default=None)
+    corelightning_rpc: Optional[str] = None
+    clightning_rpc: Optional[str] = None
 
 
 class CoreLightningRestFundingSource(LNbitsSettings):
-    corelightning_rest_url: Optional[str] = Field(default=None)
-    corelightning_rest_macaroon: Optional[str] = Field(default=None)
-    corelightning_rest_cert: Optional[str] = Field(default=None)
+    corelightning_rest_url: Optional[str] = None
+    corelightning_rest_macaroon: Optional[str] = None
+    corelightning_rest_cert: Optional[str] = None
 
 
 class EclairFundingSource(LNbitsSettings):
-    eclair_url: Optional[str] = Field(default=None)
-    eclair_pass: Optional[str] = Field(default=None)
+    eclair_url: Optional[str] = None
+    eclair_pass: Optional[str] = None
 
 
 class LndRestFundingSource(LNbitsSettings):
-    lnd_rest_endpoint: Optional[str] = Field(default=None)
-    lnd_rest_cert: Optional[str] = Field(default=None)
-    lnd_rest_macaroon: Optional[str] = Field(default=None)
-    lnd_rest_macaroon_encrypted: Optional[str] = Field(default=None)
-    lnd_cert: Optional[str] = Field(default=None)
-    lnd_admin_macaroon: Optional[str] = Field(default=None)
-    lnd_invoice_macaroon: Optional[str] = Field(default=None)
-    lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
-    lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
+    lnd_rest_endpoint: Optional[str] = None
+    lnd_rest_cert: Optional[str] = None
+    lnd_rest_macaroon: Optional[str] = None
+    lnd_rest_macaroon_encrypted: Optional[str] = None
+    lnd_cert: Optional[str] = None
+    lnd_admin_macaroon: Optional[str] = None
+    lnd_invoice_macaroon: Optional[str] = None
+    lnd_rest_admin_macaroon: Optional[str] = None
+    lnd_rest_invoice_macaroon: Optional[str] = None
 
 
 class LndGrpcFundingSource(LNbitsSettings):
-    lnd_grpc_endpoint: Optional[str] = Field(default=None)
-    lnd_grpc_cert: Optional[str] = Field(default=None)
-    lnd_grpc_port: Optional[int] = Field(default=None)
-    lnd_grpc_admin_macaroon: Optional[str] = Field(default=None)
-    lnd_grpc_invoice_macaroon: Optional[str] = Field(default=None)
-    lnd_grpc_macaroon: Optional[str] = Field(default=None)
-    lnd_grpc_macaroon_encrypted: Optional[str] = Field(default=None)
+    lnd_grpc_endpoint: Optional[str] = None
+    lnd_grpc_cert: Optional[str] = None
+    lnd_grpc_port: Optional[int]
+    lnd_grpc_admin_macaroon: Optional[str] = None
+    lnd_grpc_invoice_macaroon: Optional[str] = None
+    lnd_grpc_macaroon: Optional[str] = None
+    lnd_grpc_macaroon_encrypted: Optional[str] = None
 
 
 class LnPayFundingSource(LNbitsSettings):
-    lnpay_api_endpoint: Optional[str] = Field(default=None)
-    lnpay_api_key: Optional[str] = Field(default=None)
-    lnpay_wallet_key: Optional[str] = Field(default=None)
-    lnpay_admin_key: Optional[str] = Field(default=None)
+    lnpay_api_endpoint: Optional[str] = None
+    lnpay_api_key: Optional[str] = None
+    lnpay_wallet_key: Optional[str] = None
+    lnpay_admin_key: Optional[str] = None
 
 
 class OpenNodeFundingSource(LNbitsSettings):
-    opennode_api_endpoint: Optional[str] = Field(default=None)
-    opennode_key: Optional[str] = Field(default=None)
-    opennode_admin_key: Optional[str] = Field(default=None)
-    opennode_invoice_key: Optional[str] = Field(default=None)
+    opennode_api_endpoint: Optional[str] = None
+    opennode_key: Optional[str] = None
+    opennode_admin_key: Optional[str] = None
+    opennode_invoice_key: Optional[str] = None
 
 
 class SparkFundingSource(LNbitsSettings):
-    spark_url: Optional[str] = Field(default=None)
-    spark_token: Optional[str] = Field(default=None)
+    spark_url: Optional[str] = None
+    spark_token: Optional[str] = None
 
 
 class LnTipsFundingSource(LNbitsSettings):
-    lntips_api_endpoint: Optional[str] = Field(default=None)
-    lntips_api_key: Optional[str] = Field(default=None)
-    lntips_admin_key: Optional[str] = Field(default=None)
-    lntips_invoice_key: Optional[str] = Field(default=None)
+    lntips_api_endpoint: Optional[str] = None
+    lntips_api_key: Optional[str] = None
+    lntips_admin_key: Optional[str] = None
+    lntips_invoice_key: Optional[str] = None
 
 
 # todo: must be extracted
@@ -237,13 +267,13 @@ class EditableSettings(
     BoltzExtensionSettings,
     LightningSettings,
 ):
-    @validator(
+    @field_validator(
         "lnbits_admin_users",
         "lnbits_allowed_users",
         "lnbits_theme_options",
         "lnbits_admin_extensions",
-        pre=True,
-    )
+        mode="before")
+    
     @classmethod
     def validate_editable_settings(cls, val):
         return super().validate(val)
@@ -255,6 +285,8 @@ class EditableSettings(
         )
 
     # fixes openapi.json validation, remove field env_names
+    # TODO[pydantic]: We couldn't refactor this class, please create the `model_config` manually.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-config for more information.
     class Config:
         @staticmethod
         def schema_extra(schema: dict[str, Any]) -> None:
@@ -276,19 +308,18 @@ class EnvSettings(LNbitsSettings):
 
 
 class SaaSSettings(LNbitsSettings):
-    lnbits_saas_callback: Optional[str] = Field(default=None)
-    lnbits_saas_secret: Optional[str] = Field(default=None)
-    lnbits_saas_instance_id: Optional[str] = Field(default=None)
+    lnbits_saas_callback: Optional[str] = None
+    lnbits_saas_secret: Optional[str] = None
+    lnbits_saas_instance_id: Optional[str] = None
 
 
 class PersistenceSettings(LNbitsSettings):
     lnbits_data_folder: str = Field(default="./data")
-    lnbits_database_url: str = Field(default=None)
+    lnbits_database_url: str = Field(default="")
 
 
 class SuperUserSettings(LNbitsSettings):
-    lnbits_allowed_funding_sources: List[str] = Field(
-        default=[
+    lnbits_allowed_funding_sources: LNList = [
             "VoidWallet",
             "FakeWallet",
             "CoreLightningWallet",
@@ -301,7 +332,6 @@ class SuperUserSettings(LNbitsSettings):
             "LNbitsWallet",
             "OpenNodeWallet",
         ]
-    )
 
 
 class TransientSettings(InstalledExtensionsSettings):
@@ -325,13 +355,12 @@ class ReadOnlySettings(
 ):
     lnbits_admin_ui: bool = Field(default=False)
 
-    @validator(
-        "lnbits_allowed_funding_sources",
-        pre=True,
-    )
+    @field_validator('lnbits_allowed_funding_sources', mode='before')
     @classmethod
-    def validate_readonly_settings(cls, val):
-        return super().validate(val)
+    def validate_readonly_settings(cls, value, values, **kwargs):
+        if len(value) == 0 or value is None:
+            raise ValueError("lnbits_allowed_funding_sources must be set")
+        return value
 
     @classmethod
     def readonly_fields(cls):

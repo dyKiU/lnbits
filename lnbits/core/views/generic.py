@@ -172,7 +172,7 @@ nothing: create everything
 """,
 )
 async def wallet(
-    request: Request = Query(None),
+    request: Request,
     nme: Optional[str] = Query(None),
     usr: Optional[UUID4] = Query(None),
     wal: Optional[UUID4] = Query(None),

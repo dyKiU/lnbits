@@ -25,14 +25,14 @@ class ExplicitRelease(BaseModel):
     archive: str
     hash: str
     dependencies: List[str] = []
-    repo: Optional[str]
-    icon: Optional[str]
-    short_description: Optional[str]
-    min_lnbits_version: Optional[str]
-    html_url: Optional[str]  # todo: release_url
-    warning: Optional[str]
-    info_notification: Optional[str]
-    critical_notification: Optional[str]
+    repo: Optional[str] = None
+    icon: Optional[str] = None
+    short_description: Optional[str] = None
+    min_lnbits_version: Optional[str] = None
+    html_url: Optional[str] = None  # todo: release_url
+    warning: Optional[str] = None
+    info_notification: Optional[str] = None
+    critical_notification: Optional[str] = None
 
     def is_version_compatible(self):
         if not self.min_lnbits_version:
@@ -70,7 +70,7 @@ class ExtensionConfig(BaseModel):
     short_description: str
     tile: str = ""
     warning: Optional[str] = ""
-    min_lnbits_version: Optional[str]
+    min_lnbits_version: Optional[str] = None
 
     def is_version_compatible(self):
         if not self.min_lnbits_version:

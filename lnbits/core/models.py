@@ -110,16 +110,16 @@ class Payment(FromRowModel):
     pending: bool
     amount: int
     fee: int
-    memo: Optional[str]
+    memo: Optional[str] = None
     time: int
     bolt11: str
     preimage: str
     payment_hash: str
-    expiry: Optional[float]
+    expiry: Optional[float] = None
     extra: Dict = {}
     wallet_id: str
-    webhook: Optional[str]
-    webhook_status: Optional[int]
+    webhook: Optional[str] = None
+    webhook_status: Optional[int] = None
 
     @classmethod
     def from_row(cls, row: Row):
@@ -244,16 +244,16 @@ class PaymentFilters(FilterModel):
     checking_id: str
     amount: int
     fee: int
-    memo: Optional[str]
+    memo: Optional[str] = None
     time: datetime.datetime
     bolt11: str
     preimage: str
     payment_hash: str
-    expiry: Optional[datetime.datetime]
+    expiry: Optional[datetime.datetime] = None
     extra: Dict = {}
     wallet_id: str
-    webhook: Optional[str]
-    webhook_status: Optional[int]
+    webhook: Optional[str] = None
+    webhook_status: Optional[int] = None
 
 
 class BalanceCheck(BaseModel):

@@ -16,7 +16,7 @@ from lnbits.settings import settings
 from tests.helpers import get_hold_invoice, get_random_invoice_data, get_real_invoice
 
 # dont install extensions for tests
-settings.lnbits_extensions_default_install = []
+settings.lnbits_extensions_default_install = ""
 
 
 @pytest_asyncio.fixture(scope="session")

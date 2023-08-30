@@ -11,7 +11,7 @@ from sqlite3 import Row
 from typing import Any, Generic, List, Literal, Optional, Type, TypeVar
 
 from loguru import logger
-from pydantic import BaseModel, ValidationError, root_validator
+from pydantic import model_validator, BaseModel, ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy_aio.base import AsyncConnection
 from sqlalchemy_aio.strategy import ASYNCIO_STRATEGY
@@ -372,7 +372,7 @@ class Filter(BaseModel, Generic[TFilterModel]):
     op: Operator = Operator.EQ
     values: list[Any]
 
-    model: Optional[Type[TFilterModel]]
+    model: Optional[Type[TFilterModel]] = None
 
     @classmethod
     def parse_query(cls, key: str, raw_values: list[Any], model: Type[TFilterModel]):
@@ -436,7 +436,8 @@ class Filters(BaseModel, Generic[TFilterModel]):
 
     model: Optional[Type[TFilterModel]] = None
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
+    @classmethod
     def validate_sortby(cls, values):
         sortby = values.get("sortby")
         model = values.get("model")
